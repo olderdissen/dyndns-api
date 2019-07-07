@@ -6,7 +6,7 @@ $config = array
 	"username" => "",
 	"password" => "",
 	"hostname" => "localhost",
-	"myip" => = "0.0.0.0",
+	"myip" => "0.0.0.0",
 	"wildcard" => "OFF",
 	"mx" => "",
 	"backmx" => "NO",
