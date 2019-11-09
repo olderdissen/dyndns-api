@@ -108,17 +108,15 @@ function nsupdate($handle)
 			$status[$hostname] = "nochg";
 		else
 			{
-			$data = [];
-
-			$data[] = "server " . DYNDNS_HOST;
-			$data[] = "key " . DYNDNS_PASS;
-			$data[] = "zone " . DYNDNS_ZONE . ".";
-
-			$data[] = "del " . $hostname . ". A";
-			$data[] = "add " . $hostname . ". 60 A " . $handle["myip"];
-
-			$data[] = "send";
-			$data[] = "quit";
+			$data = [
+				"server " . DYNDNS_HOST,
+				"key " . DYNDNS_PASS,
+				"zone " . DYNDNS_ZONE . ".",
+				"del " . $hostname . ". A",
+				"add " . $hostname . ". 60 A " . $handle["myip"],
+				"send",
+				"quit"
+				];
 
 			$filename = tempnam(__DIR__, "nsupdate");
 
