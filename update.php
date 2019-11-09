@@ -1,141 +1,150 @@
 <?
 chdir(__DIR__);
 
-$config = array
-	(
-	"username" => "",
-	"password" => "",
-	"hostname" => "localhost",
-	"myip" => "0.0.0.0",
-	"wildcard" => "OFF",
-	"mx" => "",
-	"backmx" => "NO",
-	"offline" => "",
-	"status" => "",
-	"system" => "dyndns",
-	"url" => ""
-	);
+# RESOURCES:
+# https://help.dyn.com/remote-access-api/
+
+define("DYNDNS_AUTH", false);
+define("DYNDNS_SYNC", false);
+define("DYNDNS_ZONE", "example.com");
+define("DYNDNS_HOST", "127.0.0.1");
+define("DYNDNS_PASS", "rndc-key 000000000000000000000000");
+
+$handle = [];
+
+$users = [
+	"user" => "pass",
+	"test" => "test"
+	];
 
 ################################################################################
-# get myip by connection
+
+if(isset($_SERVER["PHP_AUTH_USER"]) && strlen($_SERVER["PHP_AUTH_USER"]))
+	$handle["username"] = $_SERVER["PHP_AUTH_USER"];
+
+if(isset($_GET["username"]) && strlen($_GET["username"]))
+	$handle["username"] = $_GET["username"];
+
+if(isset($_SERVER["PHP_AUTH_PW"]) && strlen($_SERVER["PHP_AUTH_PW"]))
+	$handle["password"] = $_SERVER["PHP_AUTH_PW"];
+
+if(isset($_GET["password"]) && strlen($_GET["password"]))
+	$handle["password"] = $_GET["password"];
+
+if(isset($_SERVER["PHP_AUTH_USER"]) && strlen($_SERVER["PHP_AUTH_USER"]))
+	$handle["hostname"] = $_SERVER["PHP_AUTH_USER"] . ".dyn." . DYNDNS_ZONE;
+
+if(isset($_GET["username"]) && strlen($_GET["username"]))
+	$handle["hostname"] = $_GET["username"] . ".dyn." . DYNDNS_ZONE;
+
+if(isset($_GET["hostname"]) && strlen($_GET["hostname"]))
+	$handle["hostname"] = $_GET["hostname"]; # trust in user
+
+if(isset($_SERVER["REMOTE_ADDR"]) && strlen($_SERVER["REMOTE_ADDR"]))
+	$handle["myip"] = $_SERVER["REMOTE_ADDR"];
+
+if(isset($_GET["myip"]) && strlen($_GET["myip"]))
+	$handle["myip"] = $_GET["myip"];
+		
 ################################################################################
 
-foreach(array("myip" => "REMOTE_ADDR") as $key => $value)
-	$config[$key] = (isset($_SERVER[$value]) === false ? $config[$key] : $_SERVER[$value]);
-
-################################################################################
-# get myip by users query
-################################################################################
-
-foreach($config as $key => $value)
-	$config[$key] = (isset($_GET[$key]) === false ? $config[$key] : $_GET[$key]);
-
-################################################################################
-# get username and password by header
-################################################################################
-
-foreach(array("username" => "PHP_AUTH_USER", "password" => "PHP_AUTH_PW") as $key => $value)
-	$config[$key] = (isset($_SERVER[$value]) === false ? "" : $_SERVER[$value]);
-
-################################################################################
-# create status from users input
-################################################################################
-
-if(isset($config["username"]) === false)
-	$config["status"] = "badauth";
-elseif(strlen($config["username"]) == 0)
-	$config["status"] = "badauth";
-elseif(isset($config["password"]) === false)
-	$config["status"] = "badauth";
-elseif(strlen($config["password"]) == 0)
-	$config["status"] = "badauth";
-elseif(file_exists("data/" . $config["username"] . ".pass") === false)
-	$config["status"] = "badauth";
-elseif($config["password"] != file_get_contents("data/" . $config["username"] . ".pass"))
-	$config["status"] = "badauth";
-elseif(file_exists("data/" . $config["username"] . ".ip") === false)
-	$config["status"] = "good";
-#elseif((filemtime("data/" . $config["username"] . ".ip") + 30) > time()) # 30 seconds
-#	$config["status"] = "abuse";
-elseif(isset($config["myip"]) === false)
-	$config["status"] = "abuse";
-elseif(strlen($config["myip"]) == 0)
-	$config["status"] = "abuse";
-elseif(strpos($config["myip"], ".") === false)
-	$config["status"] = "abuse";
-elseif(count(explode(".", $config["myip"])) != 4)
-	$config["status"] = "abuse";
-elseif(ip2long($config["myip"]) === false)
-	$config["status"] = "abuse";
-#elseif(filter_var($config["myip"], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) == "")
-#	$config["status"] = "abuse";
-elseif(is_private_ip($config["myip"]) == 1)
-	$config["status"] = "abuse";
-elseif($config["myip"] == file_get_contents("data/" . $config["username"] . ".ip"))
-	$config["status"] = "nochg";
+if(! defined("DYNDNS_HOST"))
+	$handle["status"] = "DYNDNS_HOST not found";
+elseif(! defined("DYNDNS_PASS"))
+	$handle["status"] = "DYNDNS_PASS not found";
+elseif(! defined("DYNDNS_ZONE"))
+	$handle["status"] = "DYNDNS_ZONE not found";
+elseif(! isset($handle["username"]))
+	$handle["status"] = "badauth";
+elseif(! strlen($handle["username"]))
+	$handle["status"] = "badauth";
+elseif(! isset($handle["password"]))
+	$handle["status"] = "badauth";
+elseif(! strlen($handle["password"]))
+	$handle["status"] = "badauth";
+elseif($handle["password"] != $users[$handle["username"]])
+	$handle["status"] = "badauth";
+elseif(! isset($handle["hostname"]))
+	$handle["status"] = "notfqdn";
+elseif(! strlen($handle["hostname"]))
+	$handle["status"] = "notfqdn";
+elseif(! isset($handle["myip"]))
+	$handle["status"] = "abuse";
+elseif(! strlen($handle["myip"]))
+	$handle["status"] = "abuse";
+elseif($handle["myip"] == "0.0.0.0")
+	$handle["status"] = "good";
+elseif(! ip2long($handle["myip"]))
+	$handle["status"] = "abuse";
 else
-	$config["status"] = "good";
+	$handle["status"] = "good";
+
+################################################################################
+
+if($handle["status"] == "badauth")
+	if(defined("DYNDNS_AUTH") && DYNDNS_AUTH)
+		header("WWW-Authenticate: basic realm=\"dyndns\"");
+
+if($handle["status"] == "good")
+	$handle["status"] = nsupdate($handle);
 
 header("Content-Type: text/plain");
 
-if($config["status"] == "badauth")
-	header("WWW-Authenticate: basic realm=\"dyndns\"");
-
-if($config["status"] == "abuse")
-	die("...");
-
-if($config["status"] == "nochg")
-	touch("data/" . $config["username"] . ".ip");
-
-if($config["status"] == "good")
-	file_put_contents("data/" . $config["username"] . ".ip", $config["myip"]);
-
-if($config["status"] == "good")
-	exec("sudo php named-update-zonefiles.php");
-
-print($config["status"]);
+die($handle["status"]);
 
 ################################################################################
-# http://www.iana.org/assignments/ipv4-address-space/ipv4-address-space.txt
-################################################################################
 
-function is_private_ip($ip)
+function nsupdate($handle)
 	{
-	$ranges = array
-		(
-		array("0.0.0.0", "0.255.255.255"),
-		array("10.0.0.0", "10.255.255.255"), # CLASS A
-		array("100.64.0.0", "100.127.255.255"),
-		array("127.0.0.0", "127.255.255.255"),
-		array("169.254.0.0", "169.254.255.255"),
-		array("172.16.0.0", "172.31.255.255"), # CLASS B
-		array("192.0.0.0", "192.0.0.255"),
-		array("192.0.2.0", "192.0.2.255"),
-		array("192.18.0.0", "192.19.255.255"),
-		array("192.88.99.0", "192.88.99.255"),
-		array("192.88.99.1", "192.88.99.1"),
-		array("192.88.99.2", "192.88.99.2"),
-		array("192.168.0.0", "192.168.255.255"), # CLASS C
-		array("198.51.100.0", "192.51.100.255"),
-		array("203.0.113.0", "203.0.113.255"),
-		array("255.255.255.255", "255.255.255.255"),
-		array("224.0.0.0", "239.255.255.255"), # CLASS D
-		array("240.0.0.0", "255.255.255.255") # CLASS E
-		);
+	$status = [];
 
-	foreach($ranges as $id => $range)
+	openlog("ddns", LOG_PID | LOG_PERROR, LOG_USER);
+
+	foreach(explode(",", $handle["hostname"]) as $hostname)
 		{
-		list($first, $last) = $range;
+		$data = dns_get_record($hostname, DNS_A);
 
-		if(ip2long($ip) < ip2long($first))
-			continue;
+		if($data[0]["ip"] == $handle["myip"])
+			$status[$hostname] = "nochg";
+		else
+			{
+			$data = [];
 
-		if(ip2long($ip) > ip2long($last))
-			continue;
+			$data[] = "server " . DYNDNS_HOST;
+			$data[] = "key " . DYNDNS_PASS;
+			$data[] = "zone " . DYNDNS_ZONE . ".";
 
-		return(1);
+			$data[] = "del " . $hostname . ". A";
+			$data[] = "add " . $hostname . ". 60 A " . $handle["myip"];
+
+			$data[] = "send";
+			$data[] = "quit";
+
+			$filename = tempnam(__DIR__, "nsupdate");
+
+			if(! $filename)
+				return("911");
+
+			file_put_contents($filename, implode("\n", $data));
+
+			$return_var = 0;
+
+			system("nsupdate " . $filename, $return_var);
+
+			if(! unlink($filename))
+				return("911");
+
+			$status[$hostname] = ($return_var ? "nochg" : "good");
+			}
+
+		syslog(LOG_INFO, sprintf("%s %s", $hostname, $status[$hostname]));
 		}
 
-	return(0);
+	closelog();
+
+	if(defined("DYNDNS_SYNC") && DYNDNS_SYNC && in_array("good", $status))
+		system("sudo rndc sync " . DYNDNS_ZONE . ".");
+
+	return(implode("\n", $status));
 	}
 ?>
